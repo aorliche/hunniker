@@ -103,6 +103,9 @@ function higherCard(arr1, arr2) {
 
 function getWinner(hands, flopTurnRiver) {
 	for (let i=0; i<4; i++) {
+		if (hands[i].fold) {
+			continue;
+		}
 		const hums = getHandSortedHums(hands[i], flopTurnRiver);
 		const ones = getFactors(hums, 1);
 		const twos = getFactors(hums, 2);
@@ -125,28 +128,31 @@ function getWinner(hands, flopTurnRiver) {
 			}
 		}
 		if (!atLeastThree) {
-			playerHandRanks.push('high-card');
-			playerHighestHands.push(hums);
+			playerHandRanks[i] = 'high-card';
+			playerHighestHands[i] = hums;
 		} else if (maxIdx == 0) {
-			playerHandRanks.push('black-' + facts[maxIdx].length);
-			playerHighestHands.push(facts[maxIdx]);
+			playerHandRanks[i] = 'black-' + facts[maxIdx].length;
+			playerHighestHands[i] = facts[maxIdx];
 		} else if (maxIdx == 1) {
-			playerHandRanks.push('blue-' + facts[maxIdx].length);
-			playerHighestHands.push(facts[maxIdx]);
+			playerHandRanks[i] = 'blue-' + facts[maxIdx].length;
+			playerHighestHands[i] = facts[maxIdx];
 		} else if (maxIdx == 2) {
-			playerHandRanks.push('teal-' + facts[maxIdx].length);
-			playerHighestHands.push(facts[maxIdx]);
+			playerHandRanks[i] = 'teal-' + facts[maxIdx].length;
+			playerHighestHands[i] = facts[maxIdx];
 		} else {
-			playerHandRanks.push('green-' + facts[maxIdx].length);
-			playerHighestHands.push(facts[maxIdx]);
+			playerHandRanks[i] = 'green-' + facts[maxIdx].length;
+			playerHighestHands[i] = facts[maxIdx];
 		}
 	}
 	let minIdx = 100;
 	let minIdxPlayerIdx = 0;
 	for (let i=0; i<4; i++) {
+		if (hands[i].fold) {
+			continue;
+		}
 		for (let j=0; j<HAND_RANKS.length; j++) {
 			if (playerHandRanks[i] == HAND_RANKS[j]) {
-				if ((j < minIdx) || 
+				if (!playerHighestHands[i] || (j < minIdx) || 
 					(j == minIdx && 
 						higherCard(playerHighestHands[i], playerHighestHands[minIdxPlayerIdx]))) {
 					minIdx = j;
@@ -172,6 +178,9 @@ class HandRankMessage {
 	}
 
 	draw(ctx) {
+		if (hands[this.playerIdx].fold) {
+			return;
+		}
 		ctx.font = '36px Sans';
 		const tm = ctx.measureText(this.msg);
 		const x = hands[this.playerIdx].loc-tm.width/2;
@@ -184,22 +193,6 @@ class HandRankMessage {
 		ctx.fillText(this.msg, x, y);
 		ctx.strokeStyle = '1px solid #33f';
 		ctx.strokeRect(x-20, y-40, tm.width+40, 60);
-
-		/*if (winnerIdx == this.playerIdx) {
-			ctx.font = '48px Sans';
-			const msg = 'Winner!';
-			const tm = ctx.measureText(msg);
-			const x = hands[this.playerIdx].loc-tm.width/2;
-			const y = this.playerIdx == 0 ? 600 : 80;
-			ctx.globalAlpha = 0.5;
-			ctx.fillStyle = '#afa';
-			ctx.fillRect(x-20, y-40, tm.width+40, 60);
-			ctx.globalAlpha = 1;
-			ctx.fillStyle = '#f00';
-			ctx.fillText(msg, x, y);
-			ctx.strokeStyle = '1px solid #33f';
-			ctx.strokeRect(x-20, y-40, tm.width+40, 60);
-		}*/
 	}
 }
 
@@ -787,6 +780,7 @@ function beginTurn() {
 	const canvas = $('#hunniker-canvas');
 	// Init hands
 	for (let i=0; i<4; i++) {
+		hands[i].bid = 0;
 		hands[i].fold = false;
 	}
 	turnOver = false;
