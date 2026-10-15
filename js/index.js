@@ -8,11 +8,13 @@ const HAND_RANKS = [
 	'green-5', 'teal-5', 'black-5', 'blue-5',
 	'green-4', 'teal-4', 'black-4', 'blue-4',
 	'green-3', 'teal-3', 'black-3', 'blue-3',
+	'high-card'
 ];
 const HAND_RANKS_MSGS = [
 	'5 4+ Factors', '5 3-Factors', '5 Primes', '5 2-Factors',
 	'4 4+ Factors', '4 3-Factors', '4 Primes', '4 2-Factors',
 	'3 4+ Factors', '3 3-Factors', '3 Primes', '3 2-Factors',
+	'High Card'
 ];
 
 // Get number of factors for each card
@@ -62,6 +64,8 @@ let lastCaller = 0;
 let lastCallerWent = false;
 let turnOver = false;
 let playerHandRanks = [];
+let playerHighestHands = [];
+let winnerIdx = 0;
 
 function getHandSortedHums(hand, flopTurnRiver) {
 	const hums = [];
@@ -78,37 +82,63 @@ function getHandSortedHums(hand, flopTurnRiver) {
 }
 
 function getFactors(hums, f) {
-	let n = 0;
+	const res = [];
 	for (let i=0; i<hums.length; i++) {
 		if (factors[hums[i]] == f) {
-			n++;
+			res.push(hums[i]);
 		}
 	}
-	return n;
+	return res;
+}
+
+// return true if arr1 has higher card than arr2
+function higherCard(arr1, arr2) {
+	for (let i=0; i<arr1.length && i<arr2.length; i++) {
+		if (arr1[i] > arr2[i]) {
+			return true;
+		}
+	}
+	return false;
 }
 
 function getWinner(hands, flopTurnRiver) {
 	for (let i=0; i<4; i++) {
-		const hums = gethandSortedHums(hands[i], flopTurnRiver);
+		const hums = getHandSortedHums(hands[i], flopTurnRiver);
 		const ones = getFactors(hums, 1);
 		const twos = getFactors(hums, 2);
 		const threes = getFactors(hums, 3);
-		const fours = getFactors(hums, 4) + getFactors(hums, 5) + getFactors(hums, 6);
-		const facts = [ones, twos, threes, fours];
+		const fours = getFactors(hums, 4);
+		const fives = getFactors(hums, 5);
+		const sixes = getFactors(hums, 6);
+		const foursPlus = [...fours, ...fives, ...sixes];
+		foursPlus.sort((a,b) => a > b);
+		const facts = [ones, twos, threes, foursPlus];
 		let maxIdx = 0;
+		let atLeastThree = false;
 		for (let j=0; j<4; j++) {
-			if (facts[j] >= facts[maxIdx]) {
+			if (facts[j].length < 3) {
+				continue;
+			}
+			if (facts[j].length >= facts[maxIdx].length) {
 				maxIdx = j;
+				atLeastThree = true;
 			}
 		}
-		if (maxIdx == 0) {
-			playerHandRanks.push('black-' + facts[maxIdx]);
+		if (!atLeastThree) {
+			playerHandRanks.push('high-card');
+			playerHighestHands.push(hums);
+		} else if (maxIdx == 0) {
+			playerHandRanks.push('black-' + facts[maxIdx].length);
+			playerHighestHands.push(facts[maxIdx]);
 		} else if (maxIdx == 1) {
-			playerHandRanks.push('blue-' + facts[maxIdx]);
+			playerHandRanks.push('blue-' + facts[maxIdx].length);
+			playerHighestHands.push(facts[maxIdx]);
 		} else if (maxIdx == 2) {
-			playerHandRanks.push('teal-' + facts[maxIdx]);
+			playerHandRanks.push('teal-' + facts[maxIdx].length);
+			playerHighestHands.push(facts[maxIdx]);
 		} else {
-			playerHandRanks.push('green-' + facts[maxIdx]);
+			playerHandRanks.push('green-' + facts[maxIdx].length);
+			playerHighestHands.push(facts[maxIdx]);
 		}
 	}
 	let minIdx = 100;
@@ -116,7 +146,9 @@ function getWinner(hands, flopTurnRiver) {
 	for (let i=0; i<4; i++) {
 		for (let j=0; j<HAND_RANKS.length; j++) {
 			if (playerHandRanks[i] == HAND_RANKS[j]) {
-				if (j < minIdx) {
+				if ((j < minIdx) || 
+					(j == minIdx && 
+						higherCard(playerHighestHands[i], playerHighestHands[minIdxPlayerIdx]))) {
 					minIdx = j;
 					minIdxPlayerIdx = i;
 				}
@@ -126,143 +158,91 @@ function getWinner(hands, flopTurnRiver) {
 	return minIdxPlayerIdx;
 }
 
-// Hands are ranked as follows: number of factors
+class HandRankMessage {
+	constructor(playerIdx) {
+		this.playerIdx = playerIdx;
+	}
 
-/*function checkGeometricSeries(hums) {
-	let maxRunLen = 0;
-	let highCardSav = 0;
-	for (let i=0; i<hums.length; i++) {
-		// Don't keep multiplying by 0 or 1
-		if (hums[i] == 0 || hums[i] == 1) {
-			continue;
-		}
-		let runLen = 1;
-		let h = hums[i];
-		let highCard = 0;
-		while (true) {
-			h *= hums[i];
-			if (hums.includes(h)) {
-				runLen++;
-				highCard = h;
-			} else {
-				break;
-			}
-		}
-		if (runLen > maxRunLen) {
-			maxRunLen = runLen;
-			highCardSav = highCard;
-		}
-	}
-	// Zero exponent
-	if (hums.includes(1)) {
-		maxRunLen++;
-	}
-	if (maxRunLen == 5) {
-		return ['geom-5', highCardSav];
-	} else if (maxRunLen == 4) {
-		return ['geom-4', highCardSav];
-	} else if (maxRunLen == 3) {
-		return ['geom-3', highCardSav];
-	}
-	return ['high-card', hums.at(-1)];
-}
-
-function checkArithmeticSeries(hums) {
-	let maxRunLen = 0;
-	let highCardSav = 0;
-	for (let i=0; i<hums.length; i++) {
-		for (let j=i+1; j<hums.length; j++) {
-			const delta = hums[j]-hums[i];
-			let runLen = 1;
-			let h = hums[i];
-			let highCard = 0;
-			while (true) {
-				h += delta;
-				if (hums.includes(h)) {
-					runLen++;
-					highCard = h;
-				} else {
-					break;
-				}
-			}
-			if (runLen > maxRunLen) {
-				maxRunLen = runLen;
-				highCardSav = highCard;
+	get msg() {
+		for (let i=0; i<HAND_RANKS.length; i++) {
+			if (playerHandRanks[this.playerIdx] == HAND_RANKS[i]) {
+				return HAND_RANKS_MSGS[i];
 			}
 		}
 	}
-	if (maxRunLen == 5) {
-		return ['arith-5', highCardSav];
-	} else if (maxRunLen == 4) {
-		return ['arith-4', highCardSav];
-	} else if (maxRunLen == 3) {
-		return ['arith-3', highCardSav];
-	} 
-	return ['high-card', hums.at(-1)];
+
+	draw(ctx) {
+		ctx.font = '36px Sans';
+		const tm = ctx.measureText(this.msg);
+		const x = hands[this.playerIdx].loc-tm.width/2;
+		const y = this.playerIdx == 0 ? 520 : 150;
+		ctx.globalAlpha = 0.5;
+		ctx.fillStyle = '#faa';
+		ctx.fillRect(x-20, y-40, tm.width+40, 60);
+		ctx.globalAlpha = 1;
+		ctx.fillStyle = '#00f';
+		ctx.fillText(this.msg, x, y);
+		ctx.strokeStyle = '1px solid #33f';
+		ctx.strokeRect(x-20, y-40, tm.width+40, 60);
+
+		/*if (winnerIdx == this.playerIdx) {
+			ctx.font = '48px Sans';
+			const msg = 'Winner!';
+			const tm = ctx.measureText(msg);
+			const x = hands[this.playerIdx].loc-tm.width/2;
+			const y = this.playerIdx == 0 ? 600 : 80;
+			ctx.globalAlpha = 0.5;
+			ctx.fillStyle = '#afa';
+			ctx.fillRect(x-20, y-40, tm.width+40, 60);
+			ctx.globalAlpha = 1;
+			ctx.fillStyle = '#f00';
+			ctx.fillText(msg, x, y);
+			ctx.strokeStyle = '1px solid #33f';
+			ctx.strokeRect(x-20, y-40, tm.width+40, 60);
+		}*/
+	}
 }
 
-function checkEvens(hums) {
-	let nEvens = 0;
-	let highCardSav = 0;
-	// sorted
-	for (let i=0; i<hums.length; i++) {
-		if (hums[i] % 2 == 0) {
-			nEvens++;
-			highCardSav = hums[i];
-		}
-	}
-	if (nEvens == 5) {
-		return ['evens-5', highCardSav];
-	} else if (nEvens == 4) {
-		return ['evens-4', highCardSav];
-	} else if (nEvens == 3) {
-		return ['evens-3', highCardSav];
-	}
-	return ['high-card', hums.at(-1)];
-}
+class EndHandMessage {
+	constructor() {
+		this.p0 = new HandRankMessage(0);
+		this.p1 = new HandRankMessage(1);
+		this.p2 = new HandRankMessage(2);
+		this.p3 = new HandRankMessage(3);
+		const players = ['Player', 'Oppo 1', 'Oppo 2', 'Oppo 3'];
+		this.winner = new Message(players[winnerIdx] + ' wins!');
+		this.button = new Button(
+			"Next Hand", 
+			new Rect(80, 675, 200, 50),
+			() => {
+				globMessage = new Message("Next Hand", 1000, () => {
+					beginTurn();
+				});
+			},
 
-function checkPrimes(hums) {
-	let nPrimes = 0;
-	let highCardSav = 0;
-	for (let i=0; i<hums.length; i++) {
-		if (primes[hums[i]]) {
-			nPrimes++;
-			highCardSav = hums[i];
-		}
+		);
+		this.msgs = [this.p0, this.p1, this.p2, this.p3, this.winner, this.button];
 	}
-	if (nPrimes == 5) {
-		return ['primes-5', highCardSav];
-	} else if (nPrimes == 4) {
-		return ['primes-4', highCardSav];
-	} else if (nPrimes == 3) {
-		return ['primes-3', highCardSav];
+	
+	click(p) {
+		this.button.click(p);
 	}
-	return ['high-card', hums.at(-1)];
-}
 
-function getHandValue(hand, flopTurnRiver) {
-	const hums = getHandSortedHums(hand, flopTurnRiver);
-	const vals = [
-		checkGeometricSeries(hums), 
-		checkArithmeticSeries(hums),
-		checkEvens(hums),
-		checkPrimes(hums)
-	]
-	let bestRank = HAND_RANKS.length-1;
-	let highCard = 0;
-	for (let i=0; i<vals.length; i++) {
-		const idx = HAND_RANKS.indexOf(vals[i][0]);
-		if (idx < bestRank) {
-			bestRank = idx;
-			highCard = vals[i][1];
-		} else if (idx == bestRank) {
-			if (vals[i][1] > highCard) {
-				highCard = vals[i][1];
-			}
+	draw(ctx) {
+		for (let i=0; i<this.msgs.length; i++) {
+			this.msgs[i].draw(ctx);
 		}
 	}
-	return [bestRank, highCard];
-}*/
+
+
+	mousemove(p) {
+		this.button.mousemove(p);
+	}
+
+	mouseout() {
+		this.button.mouseout();
+	}
+}
 
 class Message {
 	// time in milliseconds
@@ -542,7 +522,7 @@ function bigBlindFn() {
 	hands[blindIdx].bid = bid;
 	callAmount = bid;
 	// Who has the last word on fold/stay/call/raise
-	curCaller = blindIdx+1;
+	curCaller = (blindIdx+1)%4;
 	lastCaller = blindIdx;
 	lastCallerWent = false;
 	setTimeout(() => {
@@ -599,7 +579,14 @@ function doFlopTurnRiverEnd() {
 		});
 	} else {
 		turnOver = true;
-		const winnerIdx = getWinner();
+		winnerIdx = getWinner(hands, flopTurnRiver);
+		let bank = 0;
+		for (let i=0; i<4; i++) {
+			bank += hands[i].bid;
+			hands[i].bid = 0;
+		}
+		hands[winnerIdx].bank += bank;
+		globMessage = new EndHandMessage();
 	}
 }
 
@@ -800,9 +787,11 @@ function beginTurn() {
 	const canvas = $('#hunniker-canvas');
 	// Init hands
 	for (let i=0; i<4; i++) {
-		hands[i].bid = 0;
+		hands[i].fold = false;
 	}
+	turnOver = false;
 	playerHandRanks = [];
+	playerHighestHands = [];
 	globMessage = new Message('Deal Hand', 1000, () => {
 		deal(hands);
 		// Pay blinds
