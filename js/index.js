@@ -6,14 +6,18 @@ const SMALL_BLIND = 25;
 const BIG_BLIND = 50;
 const HAND_RANKS = [
 	'green-5', 'teal-5', 'black-5', 'blue-5',
+	'three-two',
 	'green-4', 'teal-4', 'black-4', 'blue-4',
 	'green-3', 'teal-3', 'black-3', 'blue-3',
+	'two-pair',
 	'high-card'
 ];
 const HAND_RANKS_MSGS = [
 	'5 4+ Factors', '5 3-Factors', '5 Primes', '5 2-Factors',
+	'Three and Two',
 	'4 4+ Factors', '4 3-Factors', '4 Primes', '4 2-Factors',
 	'3 4+ Factors', '3 3-Factors', '3 Primes', '3 2-Factors',
+	'Two Pairs',
 	'High Card'
 ];
 
@@ -63,6 +67,7 @@ let curCaller = 0;
 let lastCaller = 0;
 let lastCallerWent = false;
 let turnOver = false;
+let hideHand = false; // When win via folding
 let playerHandRanks = [];
 let playerHighestHands = [];
 let winnerIdx = 0;
@@ -77,7 +82,7 @@ function getHandSortedHums(hand, flopTurnRiver) {
 			hums.push(flopTurnRiver[i].hum);
 		}
 	}
-	hums.sort((a,b) => a > b);
+	hums.sort((a,b) => b - a);
 	return hums;
 }
 
@@ -89,6 +94,47 @@ function getFactors(hums, f) {
 		}
 	}
 	return res;
+}
+
+function getTwoPairs(facts) {
+	const twoPairs = [];
+	for (let i=0; i<facts.length; i++) {
+		if (facts[i].length == 2) {
+			for (let j=0; j<facts[i].length; j++) {
+				twoPairs.push(facts[i][j]);
+			}
+		}
+	}
+	twoPairs.sort((a,b) => b - a);
+	if (twoPairs.length == 4) {
+		return twoPairs;
+	} else {
+		return [];
+	}
+}
+
+function getThreeTwo(facts) {
+	const threes = [];
+	const twos = [];
+	for (let i=0; i<facts.length; i++) {
+		if (facts[i].length == 2) {
+			for (let j=0; j<facts[i].length; j++) {
+				twos.push(facts[i][j]);
+			}
+		}
+		if (facts[i].length == 3) {
+			for (let j=0; j<facts[i].length; j++) {
+				threes.push(facts[i][j]);
+			}
+		}
+	}
+	const combined = [...twos, ...threes];
+	combined.sort((a,b) => b - a);
+	if (combined.length == 5) {
+		return combined;
+	} else {
+		return [];
+	}
 }
 
 // return true if arr1 has higher card than arr2
@@ -114,7 +160,9 @@ function getWinner(hands, flopTurnRiver) {
 		const fives = getFactors(hums, 5);
 		const sixes = getFactors(hums, 6);
 		const foursPlus = [...fours, ...fives, ...sixes];
-		foursPlus.sort((a,b) => a > b);
+		foursPlus.sort((a,b) => b - a);
+		const twoPairs = getTwoPairs([ones, twos, threes, foursPlus]);
+		const threeTwo = getThreeTwo([ones, twos, threes, foursPlus]);
 		const facts = [ones, twos, threes, foursPlus];
 		let maxIdx = 0;
 		let atLeastThree = false;
@@ -127,7 +175,15 @@ function getWinner(hands, flopTurnRiver) {
 				atLeastThree = true;
 			}
 		}
-		if (!atLeastThree) {
+		// Add in three and two
+		if (threeTwo.length == 5 && facts[maxIdx].length < 5) {
+			playerHandRanks[i] = 'three-two';
+			playerHighestHands[i] = threeTwo;
+		// Add in two pairs
+		} else if (!atLeastThree && twoPairs.length > 0) {
+			playerHandRanks[i] = 'two-pair';
+			playerHighestHands[i] = twoPairs;
+		} else if (!atLeastThree) {
 			playerHandRanks[i] = 'high-card';
 			playerHighestHands[i] = hums;
 		} else if (maxIdx == 0) {
@@ -152,9 +208,9 @@ function getWinner(hands, flopTurnRiver) {
 		}
 		for (let j=0; j<HAND_RANKS.length; j++) {
 			if (playerHandRanks[i] == HAND_RANKS[j]) {
-				if (!playerHighestHands[i] || (j < minIdx) || 
-					(j == minIdx && 
-						higherCard(playerHighestHands[i], playerHighestHands[minIdxPlayerIdx]))) {
+				if (j < minIdx || (j == minIdx && 
+						higherCard(playerHighestHands[i], 
+							playerHighestHands[minIdxPlayerIdx]))) {
 					minIdx = j;
 					minIdxPlayerIdx = i;
 				}
@@ -178,7 +234,7 @@ class HandRankMessage {
 	}
 
 	draw(ctx) {
-		if (hands[this.playerIdx].fold) {
+		if (hands[this.playerIdx].fold || hideHand) {
 			return;
 		}
 		ctx.font = '36px Sans';
@@ -204,11 +260,22 @@ class EndHandMessage {
 		this.p3 = new HandRankMessage(3);
 		const players = ['Player', 'Oppo 1', 'Oppo 2', 'Oppo 3'];
 		this.winner = new Message(players[winnerIdx] + ' wins!');
+		let left = 0;
+		for (let i=0; i<4; i++) {
+			if (hands[i].bank > 0) {
+				left++;
+			}
+		}
+		const ng = left == 1 || hands[0].bank == 0;
+		const msg = ng ? "New Game" : "Next Hand";
 		this.button = new Button(
-			"Next Hand", 
+			msg,
 			new Rect(80, 675, 200, 50),
 			() => {
-				globMessage = new Message("Next Hand", 1000, () => {
+				globMessage = new Message(msg, 1000, () => {
+					if (ng) {
+						newGame();
+					}
 					beginTurn();
 				});
 			},
@@ -333,7 +400,7 @@ class Card {
 
 	draw(ctx) {
 		let image = cardImages[this.hum];
-		if (this.hand.inv && !turnOver) {
+		if (this.hand.inv && (!turnOver || hideHand)) {
 			image = cardImages[100];
 		}
 		// Image not loaded yet
@@ -525,6 +592,10 @@ function bigBlindFn() {
 
 function callBetLoop() {
 	if (curCaller == (lastCaller+1)%4 && lastCallerWent) {
+		// Update so oppos can raise again
+		for (let i=0; i<4; i++) {
+			hands[i].raised = false;
+		}
 		doFlopTurnRiverEnd();
 	} else {
 		// Have to do some gymnastics here
@@ -549,6 +620,29 @@ function callBetLoop() {
 
 function doFlopTurnRiverEnd() {
 	const canvas = $('#hunniker-canvas');
+	// Check for winner via all others folding
+	let left = 0;
+	let leftIdx = 0;
+	for (let i=0; i<4; i++) {
+		if (!hands[i].fold) {
+			left++;
+			leftIdx = i;
+		} 
+	}
+	if (left == 1) {
+		turnOver = true;
+		hideHand = true;
+		winnerIdx = leftIdx;
+		let bank = 0;
+		for (let i=0; i<4; i++) {
+			bank += hands[i].bid;
+			hands[i].bid = 0;
+		}
+		hands[winnerIdx].bank += bank;
+		globMessage = new EndHandMessage();
+		return;
+	}
+	// Otherwie do the flop turn river end turn stuff
 	if (!flopTurnRiver[0]) {
 		globMessage = new Message('Flop', 2000, () => {
 			flopTurnRiver[0] = 
@@ -640,6 +734,7 @@ class PlayerBidMessage {
 			() => {
 				hands[0].fold = true;
 				globMessage = new Message("Player folds!", 1000, () => {
+					hands[0].fold = true;
 					lastCaller = 0;
 					callBetLoop();
 				});
@@ -708,8 +803,20 @@ class PlayerBidMessage {
 			"All in!",
 			new Rect(80, 375, 200, 50),
 			() => {
-				hands[0].bid += hands[0].bank;
-				hands[0].bank = 0;
+				// Get amount that other unfolded people have left
+				let maxRem = 0;
+				for (let i=1; i<4; i++) {
+					const rem = hands[i].bank + hands[i].bid;
+					if (rem > maxRem) {
+						maxRem = rem;
+					}
+				}
+				let inc = maxRem - hands[0].bid;
+				if (inc > hands[0].bank) {
+					inc = hands[0].bank;
+				}
+				hands[0].bid += inc;
+				hands[0].bank -= inc;
 				lastCaller = 0;
 				lastCallerWent = false;
 				callAmount = hands[0].bid;
@@ -760,18 +867,136 @@ function playerChoice() {
 	globMessage = new PlayerBidMessage();
 }
 
+// If player has folded this will not even be called for that player
+function trialWinnerFromOppoPersp(opIdx) {
+	// Construct cards remaining deck
+	const toRemove = [hands[opIdx].cards[0].hum, hands[opIdx].cards[1].hum];
+	for (let i=0; i<3; i++) {
+		if (flopTurnRiver[i]) {
+			toRemove.push(flopTurnRiver[i].hum);
+		}
+	}
+	const dck = [];
+	for (let i=0; i<100; i++) {
+		if (!toRemove.includes(i)) {
+			dck.push(i);
+		}
+	}
+	shuffle(dck);
+	// Create sampled opponent hands
+	const fakeHands = [];
+	for (let i=0; i<4; i++) {
+		if (i == opIdx) {
+			fakeHands.push(hands[opIdx]);
+		} else {
+			const hand = new Hand();
+			hand.cards.push(new Card(dck.pop()));
+			hand.cards.push(new Card(dck.pop()));
+			fakeHands.push(hand);
+			// Update fold logic
+			if (hands[i].fold) {
+				hand.fold = true;
+			}
+		}
+	}
+	// Create sampled flopTurnRiver
+	const fakeFTR = [];
+	for (let i=0; i<3; i++) {
+		if (flopTurnRiver[i]) {
+			fakeFTR.push(flopTurnRiver[i]);
+		} else {
+			fakeFTR.push(new Card(dck.pop()));
+		}
+	}
+	// Get winner
+	return getWinner(fakeHands, fakeFTR);
+}
+
 function oppoChoice(idx) {
 	let msg;
-	// Always stay
-	if (hands[idx].bank == 0 || hands[idx].bid == callAmount) {
+	let maxOtherBank = 0;
+	// Simulate wins
+	let wins = 0;
+	for (let i=0; i<1000; i++) {
+		if (trialWinnerFromOppoPersp(idx) == idx) {
+			wins++;
+		}
+	}
+	// Get unfolded
+	let live = 0;
+	for (let i=0; i<4; i++) {
+		if (hands[i].fold) {
+			continue;
+		}
+		if (hands[i].bank == 0 && hands[i].bid == 0) {
+			continue;
+		}
+		// Figure out max other bank for not raising needlessly
+		if (i != idx && hands[i].bank > maxOtherBank) {
+			maxOtherBank = hands[i].bank;
+		}
+		live++;
+	}
+	const thrsh = 1000/live;
+	// Stay if broke
+	if (hands[idx].bank == 0) { 
 		msg = "Stay";
-	// Always call
+	// Can stay or raise
+	} else if (hands[idx].bid == callAmount) {
+		// If low win pct stay
+		// If already raised this cycle stay
+		// If no chance to win any more money stay
+		if (wins < thrsh*1 || hands[idx].raised || maxOtherBank == 0) {
+			msg = "Stay";
+		// Higher win pct raise 50
+		} else if (wins < thrsh*1.3 || maxOtherBank < 200) {
+			let bid = hands[idx].bank > 50 ? 50 : hands[idx].bank;
+			hands[idx].bank -= bid;
+			hands[idx].bid += bid;
+			msg = "Raise " + bid;
+			lastCaller = idx;
+			lastCallerWent = false;
+			hands[idx].raised = true;
+		// Much higher win pct raise 200
+		} else {
+			const bid = hands[idx].bank > 200 ? 200 : hands[idx].bank;
+			hands[idx].bank -= bid;
+			hands[idx].bid += bid;
+			msg = "Raise " + bid;
+			lastCaller = idx;
+			lastCallerWent = false;
+			hands[idx].raised = true;
+		}
+	// Must fold, call, or raise
 	} else {
-		const inc = callAmount - hands[idx].bid;
-		const bid = hands[idx].bank > inc ? inc : hands[idx].bank;
-		hands[idx].bank -= bid;
-		hands[idx].bid += bid;
-		msg = "Call";
+		// If low win pct, fold
+		if (wins < thrsh*0.75) {
+			msg = "Fold"
+			hands[idx].fold = true;
+		// Call if slightly better
+		} else if (wins < thrsh*1.2 || maxOtherBank < 200) {
+			const inc = callAmount - hands[idx].bid;
+			const bid = hands[idx].bank > inc ? inc : hands[idx].bank;
+			hands[idx].bank -= bid;
+			hands[idx].bid += bid;
+			msg = "Call";
+		// Raise if much better
+		} else {
+			const inc = callAmount - hands[idx].bid + 200;
+			const bid = hands[idx].bank > inc ? inc : hands[idx].bank;
+			hands[idx].bank -= bid;
+			hands[idx].bid += bid;
+			msg = "Raise " + bid;
+			lastCaller = idx;
+			lastCallerWent = false;
+			hands[idx].raised = true;
+		}
+	}
+	// Update call amount
+	for (let i=0; i<4; i++) {
+		if (hands[i].bid > callAmount) {
+			callAmount = hands[i].bid;
+		}
 	}
 	globMessage = new Message(hands[idx].name + " " + msg, 1000, callBetLoop);
 }
@@ -781,16 +1006,33 @@ function beginTurn() {
 	// Init hands
 	for (let i=0; i<4; i++) {
 		hands[i].bid = 0;
-		hands[i].fold = false;
+		hands[i].fold = hands[i].bank == 0 ? true : false;
+		hands[i].raised = false;
 	}
 	turnOver = false;
+	hideHand = false;
 	playerHandRanks = [];
 	playerHighestHands = [];
+	deal(hands);
 	globMessage = new Message('Deal Hand', 1000, () => {
-		deal(hands);
 		// Pay blinds
 		globMessage = new Message('Small Blind', 1000, smallBlindFn);
 	});
+}
+
+function newGame() {
+	const canvas = $('#hunniker-canvas');
+	hands = [];
+
+	const player = new Hand(canvas.width/2, false, "Player", START_BANK);
+	hands.push(player);
+
+	const oppLeft = new Hand(canvas.width/4-100, true, "Oppo 1", START_BANK);
+	const oppMid = new Hand(2*canvas.width/4, true, "Oppo 2", START_BANK);
+	const oppRight = new Hand(3*canvas.width/4+100, true, "Oppo 3", START_BANK);
+	hands.push(oppLeft);
+	hands.push(oppMid);
+	hands.push(oppRight);
 }
 
 // We don't care about the rate of redraw, as long as it's fast enough
@@ -853,16 +1095,6 @@ window.addEventListener('load', e => {
 		otherImages['bid'] = bidImg;
 	});
 
-	const player = new Hand(canvas.width/2, false, "Player", START_BANK);
-	hands.push(player);
-
-	const oppLeft = new Hand(canvas.width/4-100, true, "Oppo 1", START_BANK);
-	const oppMid = new Hand(2*canvas.width/4, true, "Oppo 2", START_BANK);
-	const oppRight = new Hand(3*canvas.width/4+100, true, "Oppo 3", START_BANK);
-	hands.push(oppLeft);
-	hands.push(oppMid);
-	hands.push(oppRight);
-
 	requestAnimationFrame(animate);
 
 	// blow up cards
@@ -902,17 +1134,9 @@ window.addEventListener('load', e => {
 		}
 	});
 
+	newGame();
+
 	globMessage = new Message('Welcome to Hunniker!', 2000, () => {
 		beginTurn();
 	});
 });
-
-/*const h = new Hand();
-h.cards.push(new Card(2));
-h.cards.push(new Card(5));
-h.cards.push(new Card(25));
-h.cards.push(new Card(7));
-h.cards.push(new Card(14));
-
-const [rank, hc] = getHandValue(h, flopTurnRiver);
-console.log(HAND_RANKS[rank], hc);*/
