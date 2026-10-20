@@ -1041,7 +1041,7 @@ function animate(ts) {
 	const ctx = canvas.getContext('2d');
 
 	// Clear canvas
-	ctx.fillStyle = 'white';
+	ctx.fillStyle = '#477148';
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
 	// Draw hands
