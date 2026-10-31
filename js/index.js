@@ -6,16 +6,16 @@ const SMALL_BLIND = 25;
 const BIG_BLIND = 50;
 const HAND_RANKS = [
 	'green-5', 'teal-5', 'black-5', 'blue-5',
-	'three-two',
 	'green-4', 'teal-4', 'black-4', 'blue-4',
+	'three-two',
 	'green-3', 'teal-3', 'black-3', 'blue-3',
 	'two-pair',
 	'high-card'
 ];
 const HAND_RANKS_MSGS = [
 	'5 4+ Factors', '5 3-Factors', '5 Primes', '5 2-Factors',
-	'Three and Two',
 	'4 4+ Factors', '4 3-Factors', '4 Primes', '4 2-Factors',
+	'Three and Two',
 	'3 4+ Factors', '3 3-Factors', '3 Primes', '3 2-Factors',
 	'Two Pairs',
 	'High Card'
