@@ -41,7 +41,7 @@ for (let i=3; i<100; i++) {
 }
 
 // Get histogram of factors
-/*const hist = [];
+const hist = [];
 
 for (let i=0; i<factors.length; i++) {
 	if (!hist[factors[i]]) {
@@ -51,7 +51,7 @@ for (let i=0; i<factors.length; i++) {
 	}
 }
 
-console.log(hist);*/
+console.log(hist);
 
 // 0-99: cards 100: back
 const cardImages = [];
